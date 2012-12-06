@@ -162,7 +162,7 @@ spec = do
     context "same as failed_examples" $ do
       failed_examplesSpec H.progress
 
-failed_examplesSpec :: H.Formatter -> Spec
+failed_examplesSpec :: H.Formatter () -> Spec
 failed_examplesSpec formatter = do
   let runSpec = captureLines . H.hspecWith H.defaultConfig {H.configFormatter = formatter}
 

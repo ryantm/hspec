@@ -20,7 +20,7 @@ writeFailureReport x = do
     onError err = do
       hPutStrLn stderr ("WARNING: Could not write environment variable HSPEC_FAILURES (" ++ show err ++ ")")
 
-readFailureReport :: Config -> IO Config
+readFailureReport :: Config st -> IO (Config st)
 readFailureReport c = do
   mx <- getEnv "HSPEC_FAILURES"
   case mx >>= readMaybe of
@@ -30,7 +30,7 @@ readFailureReport c = do
     Just (seed, xs) -> do
       (return . setSeed seed . configAddFilter (`elem` xs)) c
 
-setSeed :: Seed -> Config -> Config
+setSeed :: Seed -> Config st -> Config st
 setSeed seed c
   | hasSeed = c
   | otherwise = configSetSeed seed c

@@ -37,7 +37,7 @@ import           Test.Hspec.Core.Type hiding (Spec)
 import qualified Test.Hspec.Runner as Runner
 import           Test.Hspec.Runner (Summary(..), Config(..), defaultConfig)
 
-hspecWith :: Config -> [SpecTree] -> IO Summary
+hspecWith :: Config () -> [SpecTree] -> IO Summary
 hspecWith c = Runner.hspecWith c . fromSpecList
 
 {-# DEPRECATED hspecX "use `Test.Hspec.Runner.hspec` instead" #-}     -- since 1.2.0

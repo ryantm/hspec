@@ -5,6 +5,10 @@ module Test.Hspec.Runner (
   hspec
 , hspecWith
 
+-- * Custom formatter state
+, hspecWith_
+, mkDefaultConfig
+
 -- * Types
 , Summary (..)
 , Config (..)
@@ -52,11 +56,11 @@ filterSpecs p = goSpecs []
         xs -> Just (SpecGroup group xs)
 
 -- | Evaluate all examples of a given spec and produce a report.
-runFormatter :: Bool -> Config -> Formatter -> [SpecTree] -> FormatM ()
+runFormatter :: Bool -> Config st -> Formatter st -> [SpecTree] -> FormatM st ()
 runFormatter useColor c formatter specs = headerFormatter formatter >> zip [0..] specs `each` go []
   where
     -- like forM_, but respects --fast-fail
-    each :: [a] -> (a -> FormatM ()) -> FormatM ()
+    each :: [a] -> (a -> FormatM st ()) -> FormatM st ()
     each []     _ = pure ()
     each (x:xs) f = do
       f x
@@ -64,12 +68,12 @@ runFormatter useColor c formatter specs = headerFormatter formatter >> zip [0..]
       unless (configFastFail c && fails /= 0) $ do
         xs `each` f
 
-    eval :: IO Result -> FormatM (Either E.SomeException Result)
+    eval :: IO Result -> FormatM st (Either E.SomeException Result)
     eval
       | configDryRun c = \_ -> return (Right Success)
       | otherwise      = liftIO . safeTry . fmap forceResult
 
-    go :: [String] -> (Int, SpecTree) -> FormatM ()
+    -- go :: [String] -> (Int, SpecTree) -> FormatM st ()
     go rGroups (n, SpecGroup group xs) = do
       exampleGroupStarted formatter n (reverse rGroups) group
       zip [0..] xs `each` go (group : rGroups)
@@ -115,7 +119,7 @@ hspec spec = do
     r <- hspecWith c spec
     unless (summaryFailures r == 0) exitFailure
 
-handleReRun :: Config -> IO Config
+handleReRun :: Config st -> IO (Config st)
 handleReRun c = do
   if configReRun c
     then do
@@ -125,7 +129,7 @@ handleReRun c = do
 
 -- Add a StdGen to configQuickCheckArgs if there is none.  That way the same
 -- seed is used for all properties.  This helps with --seed and --re-run.
-ensureStdGen :: Config -> IO Config
+ensureStdGen :: Config st -> IO (Config st)
 ensureStdGen c = case QC.replay qcArgs of
   Nothing -> do
     stdGen <- newStdGen
@@ -134,14 +138,17 @@ ensureStdGen c = case QC.replay qcArgs of
   where
     qcArgs = configQuickCheckArgs c
 
+hspecWith :: Config () -> Spec -> IO Summary
+hspecWith = hspecWith_ ()
+
 -- | Run given spec with custom options.
 -- This is similar to `hspec`, but more flexible.
 --
 -- /Note/: `hspecWith` does not exit with `exitFailure` on failing spec items.
 -- If you need this, you have to check the `Summary` yourself and act
 -- accordingly.
-hspecWith :: Config -> Spec -> IO Summary
-hspecWith c_ spec = do
+hspecWith_ :: st -> Config st -> Spec -> IO Summary
+hspecWith_ st c_ spec = do
   -- read failure report on --re-run
   c <- handleReRun c_ >>= ensureStdGen
 
@@ -152,7 +159,7 @@ hspecWith c_ spec = do
   useColor <- doesUseColor h c
 
   withHiddenCursor useColor h $
-    runFormatM useColor (configHtmlOutput c) (configPrintCpuTime c) seed h $ do
+    runFormatM st useColor (configHtmlOutput c) (configPrintCpuTime c) seed h $ do
       runFormatter useColor c formatter (maybe id filterSpecs (configFilterPredicate c) $ runSpecM spec) `finally_` do
         failedFormatter formatter
 
@@ -169,7 +176,7 @@ hspecWith c_ spec = do
       | useColor  = E.bracket_ (hHideCursor h) (hShowCursor h)
       | otherwise = id
 
-    doesUseColor :: Handle -> Config -> IO Bool
+    doesUseColor :: Handle -> Config st -> IO Bool
     doesUseColor h c = case configColorMode c of
       ColorAuto  -> hIsTerminalDevice h
       ColorNever -> return False

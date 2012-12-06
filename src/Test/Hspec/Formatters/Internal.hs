@@ -25,6 +25,9 @@ module Test.Hspec.Formatters.Internal (
 , withPendingColor
 , withFailColor
 
+, getFormatterState
+, setFormatterState
+
 -- * Functions for internal use
 , runFormatM
 , liftIO
@@ -51,12 +54,12 @@ import           Test.Hspec.Compat
 import           Test.Hspec.Core.Type (Progress)
 
 -- | A lifted version of `Control.Monad.Trans.State.gets`
-gets :: (FormatterState -> a) -> FormatM a
+gets :: (InternalState st -> a) -> FormatM st a
 gets f = FormatM $ do
   f <$> (get >>= IOClass.liftIO . readIORef)
 
 -- | A lifted version of `Control.Monad.Trans.State.modify`
-modify :: (FormatterState -> FormatterState) -> FormatM ()
+modify :: (InternalState st -> InternalState st) -> FormatM st ()
 modify f = FormatM $ do
   get >>= IOClass.liftIO . (`modifyIORef'` f)
 
@@ -65,10 +68,10 @@ modify f = FormatM $ do
 -- This is meant for internal use only, and not part of the public API.  This
 -- is also the reason why we do not make FormatM an instance MonadIO, so we
 -- have narrow control over the visibilty of this function.
-liftIO :: IO a -> FormatM a
+liftIO :: IO a -> FormatM st a
 liftIO action = FormatM (IOClass.liftIO action)
 
-data FormatterState = FormatterState {
+data InternalState st = InternalState {
   stateHandle     :: Handle
 , stateUseColor   :: Bool
 , produceHTML     :: Bool
@@ -80,62 +83,69 @@ data FormatterState = FormatterState {
 , stateUsedSeed   :: Integer
 , cpuStartTime    :: Maybe Integer
 , startTime       :: POSIXTime
+, userState       :: st
 }
 
 -- | The random seed that is used for QuickCheck.
-usedSeed :: FormatM Integer
+usedSeed :: FormatM st Integer
 usedSeed = gets stateUsedSeed
 
+getFormatterState :: FormatM st st
+getFormatterState = gets userState
+
+setFormatterState :: st -> FormatM st ()
+setFormatterState st = modify $ \s -> s {userState = st}
+
 -- | The total number of examples encountered so far.
-totalCount :: FormatterState -> Int
+totalCount :: InternalState st -> Int
 totalCount s = successCount s + pendingCount s + failCount s
 
 -- NOTE: We use an IORef here, so that the state persists when UserInterrupt is
 -- thrown.
-newtype FormatM a = FormatM (StateT (IORef FormatterState) IO a)
+newtype FormatM st a = FormatM (StateT (IORef (InternalState st)) IO a)
   deriving (Functor, Applicative, Monad)
 
-runFormatM :: Bool -> Bool -> Bool -> Integer -> Handle -> FormatM a -> IO a
-runFormatM useColor produceHTML_ printCpuTime seed handle (FormatM action) = do
+runFormatM :: st -> Bool -> Bool -> Bool -> Integer -> Handle -> FormatM st a -> IO a
+runFormatM st useColor produceHTML_ printCpuTime seed handle (FormatM action) = do
   time <- getPOSIXTime
   cpuTime <- if printCpuTime then Just <$> CPUTime.getCPUTime else pure Nothing
-  st <- newIORef (FormatterState handle useColor produceHTML_ False 0 0 0 [] seed cpuTime time)
-  evalStateT action st
+  internalState <- newIORef (InternalState handle useColor produceHTML_ False 0 0 0 [] seed cpuTime time st)
+  evalStateT action internalState
 
 -- | Increase the counter for successful examples
-increaseSuccessCount :: FormatM ()
+increaseSuccessCount :: FormatM st ()
 increaseSuccessCount = modify $ \s -> s {successCount = succ $ successCount s}
 
 -- | Increase the counter for pending examples
-increasePendingCount :: FormatM ()
+increasePendingCount :: FormatM st ()
 increasePendingCount = modify $ \s -> s {pendingCount = succ $ pendingCount s}
 
 -- | Increase the counter for failed examples
-increaseFailCount :: FormatM ()
+increaseFailCount :: FormatM st ()
 increaseFailCount = modify $ \s -> s {failCount = succ $ failCount s}
 
 -- | Get the number of successful examples encountered so far.
-getSuccessCount :: FormatM Int
+getSuccessCount :: FormatM st Int
 getSuccessCount = gets successCount
 
 -- | Get the number of pending examples encountered so far.
-getPendingCount :: FormatM Int
+getPendingCount :: FormatM st Int
 getPendingCount = gets pendingCount
 
 -- | Get the number of failed examples encountered so far.
-getFailCount :: FormatM Int
+getFailCount :: FormatM st Int
 getFailCount = gets failCount
 
 -- | Get the total number of examples encountered so far.
-getTotalCount :: FormatM Int
+getTotalCount :: FormatM st Int
 getTotalCount = gets totalCount
 
 -- | Append to the list of accumulated failure messages.
-addFailMessage :: Path -> (Either SomeException String) -> FormatM ()
+addFailMessage :: Path -> (Either SomeException String) -> FormatM st ()
 addFailMessage p m = modify $ \s -> s {failMessages = FailureRecord p m : failMessages s}
 
 -- | Get the list of accumulated failure messages.
-getFailMessages :: FormatM [FailureRecord]
+getFailMessages :: FormatM st [FailureRecord]
 getFailMessages = reverse `fmap` gets failMessages
 
 data FailureRecord = FailureRecord {
@@ -143,16 +153,16 @@ data FailureRecord = FailureRecord {
 , failureRecordMessage  :: Either SomeException String
 }
 
-data Formatter = Formatter {
+data Formatter st = Formatter {
 
-  headerFormatter :: FormatM ()
+  headerFormatter :: FormatM st ()
 
 -- | evaluated before each test group
 --
 -- The given number indicates the position within the parent group.
-, exampleGroupStarted :: Int -> [String] -> String -> FormatM ()
+, exampleGroupStarted :: Int -> [String] -> String -> FormatM st ()
 
-, exampleGroupDone    :: FormatM ()
+, exampleGroupDone    :: FormatM st ()
 
 -- | used to notify the progress of the currently evaluated example
 --
@@ -160,71 +170,71 @@ data Formatter = Formatter {
 , exampleProgress     :: Handle -> Path -> Progress -> IO ()
 
 -- | evaluated after each successful example
-, exampleSucceeded    :: Path -> FormatM ()
+, exampleSucceeded    :: Path -> FormatM st ()
 
 -- | evaluated after each failed example
-, exampleFailed       :: Path -> Either SomeException String -> FormatM ()
+, exampleFailed       :: Path -> Either SomeException String -> FormatM st ()
 
 -- | evaluated after each pending example
-, examplePending      :: Path -> Maybe String -> FormatM ()
+, examplePending      :: Path -> Maybe String -> FormatM st ()
 
 -- | evaluated after a test run
-, failedFormatter     :: FormatM ()
+, failedFormatter     :: FormatM st ()
 
 -- | evaluated after `failuresFormatter`
-, footerFormatter     :: FormatM ()
+, footerFormatter     :: FormatM st ()
 }
 
 
 -- | Append an empty line to the report.
 --
 -- Calling this multiple times has the same effect as calling it once.
-newParagraph :: FormatM ()
+newParagraph :: FormatM st ()
 newParagraph = do
   f <- gets lastIsEmptyLine
   unless f $ do
     writeLine ""
     setLastIsEmptyLine True
 
-setLastIsEmptyLine :: Bool -> FormatM ()
+setLastIsEmptyLine :: Bool -> FormatM st ()
 setLastIsEmptyLine f = modify $ \s -> s {lastIsEmptyLine = f}
 
 -- | Append some output to the report.
-write :: String -> FormatM ()
+write :: String -> FormatM st ()
 write s = do
   h <- gets stateHandle
   liftIO $ IO.hPutStr h s
   setLastIsEmptyLine False
 
 -- | The same as `write`, but adds a newline character.
-writeLine :: String -> FormatM ()
+writeLine :: String -> FormatM st ()
 writeLine s = write s >> write "\n"
 
 -- | Set output color to red, run given action, and finally restore the default
 -- color.
-withFailColor :: FormatM a -> FormatM a
+withFailColor :: FormatM st a -> FormatM st a
 withFailColor = withColor (SetColor Foreground Dull Red) "hspec-failure"
 
 -- | Set output to color green, run given action, and finally restore the
 -- default color.
-withSuccessColor :: FormatM a -> FormatM a
+withSuccessColor :: FormatM st a -> FormatM st a
 withSuccessColor = withColor (SetColor Foreground Dull Green) "hspec-success"
 
 -- | Set output color to yellow, run given action, and finally restore the
 -- default color.
-withPendingColor :: FormatM a -> FormatM a
+withPendingColor :: FormatM st a -> FormatM st a
 withPendingColor = withColor (SetColor Foreground Dull Yellow) "hspec-pending"
 
 -- | Set a color, run an action, and finally reset colors.
-withColor :: SGR -> String -> FormatM a -> FormatM a
+withColor :: SGR -> String -> FormatM st a -> FormatM st a
 withColor color cls action = do
   r <- gets produceHTML
   (if r then htmlSpan cls else withColor_ color) action
 
-htmlSpan :: String -> FormatM a -> FormatM a
+htmlSpan :: String -> FormatM st a -> FormatM st a
 htmlSpan cls action = write ("<span class=\"" ++ cls ++ "\">") *> action <* write "</span>"
 
-withColor_ :: SGR -> FormatM a -> FormatM a
+withColor_ :: SGR -> FormatM st a -> FormatM st a
 withColor_ color (FormatM action) = do
   useColor <- gets stateUseColor
   h        <- gets stateHandle
@@ -244,7 +254,7 @@ withColor_ color (FormatM action) = do
 -- |
 -- @finally_ actionA actionB@ runs @actionA@ and then @actionB@.  @actionB@ is
 -- run even when a `UserInterrupt` occurs during @actionA@.
-finally_ :: FormatM () -> FormatM () -> FormatM ()
+finally_ :: FormatM st () -> FormatM st () -> FormatM st ()
 finally_ (FormatM actionA) (FormatM actionB) = FormatM . StateT $ \st -> do
   r <- try (execStateT actionA st)
   case r of
@@ -256,7 +266,7 @@ finally_ (FormatM actionA) (FormatM actionB) = FormatM . StateT $ \st -> do
       runStateT actionB st_
 
 -- | Get the used CPU time since the test run has been started.
-getCPUTime :: FormatM (Maybe Double)
+getCPUTime :: FormatM st (Maybe Double)
 getCPUTime = do
   t1  <- liftIO CPUTime.getCPUTime
   mt0 <- gets cpuStartTime
@@ -265,7 +275,7 @@ getCPUTime = do
     toSeconds x = fromIntegral x / (10.0 ^ (12 :: Integer))
 
 -- | Get the passed real time since the test run has been started.
-getRealTime :: FormatM Double
+getRealTime :: FormatM st Double
 getRealTime = do
   t1 <- liftIO getPOSIXTime
   t0 <- gets startTime

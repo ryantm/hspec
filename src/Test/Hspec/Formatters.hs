@@ -46,6 +46,10 @@ module Test.Hspec.Formatters (
 
 -- ** Helpers
 , formatException
+
+-- ** Custom state
+, getFormatterState
+, setFormatterState
 ) where
 
 import           Data.Maybe
@@ -85,10 +89,13 @@ import Test.Hspec.Formatters.Internal (
   , withSuccessColor
   , withPendingColor
   , withFailColor
+
+  , setFormatterState
+  , getFormatterState
   )
 
 
-silent :: Formatter
+silent :: Formatter ()
 silent = Formatter {
   headerFormatter     = return ()
 , exampleGroupStarted = \_ _ _ -> return ()
@@ -102,7 +109,7 @@ silent = Formatter {
 }
 
 
-specdoc :: Formatter
+specdoc :: Formatter ()
 specdoc = silent {
 
   headerFormatter = do
@@ -139,7 +146,7 @@ specdoc = silent {
     indentationFor nesting = replicate (length nesting * 2) ' '
 
 
-progress :: Formatter
+progress :: Formatter ()
 progress = silent {
   exampleSucceeded = \_   -> withSuccessColor $ write "."
 , exampleFailed    = \_ _ -> withFailColor    $ write "F"
@@ -149,13 +156,13 @@ progress = silent {
 }
 
 
-failed_examples :: Formatter
+failed_examples :: Formatter ()
 failed_examples   = silent {
   failedFormatter = defaultFailedFormatter
 , footerFormatter = defaultFooter
 }
 
-defaultFailedFormatter :: FormatM ()
+defaultFailedFormatter :: FormatM st ()
 defaultFailedFormatter = do
   newParagraph
 
@@ -168,7 +175,7 @@ defaultFailedFormatter = do
     write "Randomized with seed " >> usedSeed >>= writeLine . show
     writeLine ""
   where
-    formatFailure :: (Int, FailureRecord) -> FormatM ()
+    formatFailure :: (Int, FailureRecord) -> FormatM st ()
     formatFailure (n, FailureRecord path reason) = do
       write (show n ++ ") ")
       withFailColor $ do
@@ -192,7 +199,7 @@ defaultFailedFormatter = do
 formatException :: E.SomeException -> String
 formatException (E.SomeException e) = showType e ++ " (" ++ show e ++ ")"
 
-defaultFooter :: FormatM ()
+defaultFooter :: FormatM st ()
 defaultFooter = do
 
   writeLine =<< (++)

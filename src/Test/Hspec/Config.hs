@@ -2,6 +2,7 @@ module Test.Hspec.Config (
   Config (..)
 , ColorMode (..)
 , defaultConfig
+, mkDefaultConfig
 , getConfig
 , configAddFilter
 , configSetSeed
@@ -24,7 +25,7 @@ import           Test.Hspec.Util
 -- for Monad (Either e) when base < 4.3
 import           Control.Monad.Trans.Error ()
 
-data Config = Config {
+data Config st = Config {
   configVerbose         :: Bool
 , configDryRun          :: Bool
 , configPrintCpuTime    :: Bool
@@ -37,7 +38,7 @@ data Config = Config {
 , configFilterPredicate :: Maybe (Path -> Bool)
 , configQuickCheckArgs  :: QC.Args
 , configColorMode       :: ColorMode
-, configFormatter       :: Formatter
+, configFormatter       :: Formatter st
 , configHtmlOutput      :: Bool
 , configHandle          :: Handle
 }
@@ -46,10 +47,13 @@ data Config = Config {
 
 data ColorMode = ColorAuto | ColorNever | ColorAlway
 
-defaultConfig :: Config
-defaultConfig = Config False False False False False Nothing QC.stdArgs {QC.chatty = False} ColorAuto specdoc False stdout
+mkDefaultConfig :: Formatter st -> Config st
+mkDefaultConfig fm = Config False False False False False Nothing QC.stdArgs {QC.chatty = False} ColorAuto fm False stdout
 
-formatters :: [(String, Formatter)]
+defaultConfig :: Config ()
+defaultConfig = mkDefaultConfig specdoc
+
+formatters :: [(String, Formatter ())]
 formatters = [
     ("specdoc", specdoc)
   , ("progress", progress)
@@ -60,30 +64,30 @@ formatters = [
 formatHelp :: String
 formatHelp = unlines (addLineBreaks "use a custom formatter; this can be one of:" ++ map (("   " ++) . fst) formatters)
 
-type Result = Either NoConfig Config
+type Result = Either NoConfig (Config ())
 
 data NoConfig = Help | InvalidArgument String String
 
 -- | Add a filter predicate to config.  If there is already a filter predicate,
 -- then combine them with `||`.
-configAddFilter :: (Path -> Bool) -> Config -> Config
+configAddFilter :: (Path -> Bool) -> Config st -> Config st
 configAddFilter p1 c = c {configFilterPredicate = Just p}
   where
     -- if there is already a predicate, we combine them with ||
     p  = maybe p1 (\p0 path -> p0 path || p1 path) mp
     mp = configFilterPredicate c
 
-setMaxSuccess :: Int -> Config -> Config
+setMaxSuccess :: Int -> Config st -> Config st
 setMaxSuccess n c = c {configQuickCheckArgs = (configQuickCheckArgs c) {QC.maxSuccess = n}}
 
-configSetSeed :: Integer -> Config -> Config
+configSetSeed :: Integer -> Config st -> Config st
 configSetSeed n c = c {configQuickCheckArgs = (configQuickCheckArgs c) {QC.replay = Just (stdGenFromInteger n, 0)}}
 
 
 data Arg a = Arg {
   argumentName   :: String
 , argumentParser :: String -> Maybe a
-, argumentSetter :: a -> Config -> Config
+, argumentSetter :: a -> Config () -> Config ()
 }
 
 mkOption :: [Char] -> [Char] -> Arg a -> String -> OptDescr (Result -> Result)
@@ -112,13 +116,13 @@ options = [
   where
     h = unlines . addLineBreaks
 
-    setFilter :: String -> Config -> Config
+    setFilter :: String -> Config st -> Config st
     setFilter = configAddFilter . filterPredicate
 
-    readFormatter :: String -> Maybe Formatter
+    readFormatter :: String -> Maybe (Formatter ())
     readFormatter = (`lookup` formatters)
 
-    setFormatter :: Formatter -> Config -> Config
+    setFormatter :: Formatter () -> Config () -> Config ()
     setFormatter f c = c {configFormatter = f}
 
     setPrintCpuTime x = x >>= \c -> return c {configPrintCpuTime = True}
@@ -155,7 +159,7 @@ undocumentedOptions = [
     setHtml :: Result -> Result
     setHtml x = x >>= \c -> return c {configHtmlOutput = True}
 
-getConfig :: IO Config
+getConfig :: IO (Config ())
 getConfig = do
   (opts, args, errors) <- getOpt Permute (options ++ undocumentedOptions) <$> getArgs
 

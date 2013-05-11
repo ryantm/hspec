@@ -1,3 +1,7 @@
+## Changes in 2.0.0
+ - Remove `Example` instance for `Test.HUnit.Test` (#101), use
+   `Test.Hspec.HUnit.fromHUnitTest` instead.
+
 ## Changes in 1.9.0
  - Depend on QuickCheck 2.7
 

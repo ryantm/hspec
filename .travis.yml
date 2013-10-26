@@ -1,16 +1,14 @@
-language: haskell
+language: objective-c
 
-env:
-  - QC=QuickCheck
-  - QC=QuickCheck-2.6
-  - QC=QuickCheck-2.5.1.1
-  - QC=QuickCheck-2.5.1
-
-before_install:
-  - cabal install $QC
+install:
+  - echo noop
 
 script:
-  - cabal test
+  - brew update
+  - brew install ghc
+  - brew install cabal-install
+  - cabal update && cabal install && cabal install --only-dependencies --enable-tests
+  - cabal clean && cabal test
   - cabal install
   - (cd hspec-discover/example/ && cabal test)
   - (cd hspec-discover/integration-test/ && cabal test)

@@ -9,7 +9,7 @@ data Tree a
   | Leaf !String a
   deriving (Eq, Show, Functor)
 
-toTree :: Spec -> IO [Tree Item]
+toTree :: SpecWith a -> IO [Tree (Item a)]
 toTree spec = concat <$> mapM go (runSpecM spec)
   where
     go x = case x of

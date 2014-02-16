@@ -155,7 +155,7 @@ isDumb :: IO Bool
 isDumb = maybe False (== "dumb") <$> lookupEnv "TERM"
 
 markSuccess :: Item () -> Item ()
-markSuccess item = item {itemExample = evaluateExample Success}
+markSuccess _ = evaluateExample Success
 
 -- | Summary of a test run.
 data Summary = Summary {

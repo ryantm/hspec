@@ -15,10 +15,10 @@ main :: IO ()
 main = hspec spec
 
 evaluateExample :: (H.Example e,  H.Arg e ~ ()) => e -> IO H.Result
-evaluateExample e = H.evaluateExample e (defaultParams {H.paramsQuickCheckArgs = (H.paramsQuickCheckArgs defaultParams) {replay = Just (read "", 0)}}) ($ ()) noOpProgressCallback
+evaluateExample e = (H.itemExample $ H.evaluateExample e) (defaultParams {H.paramsQuickCheckArgs = (H.paramsQuickCheckArgs defaultParams) {replay = Just (read "", 0)}}) ($ ()) noOpProgressCallback
 
 evaluateExampleWith :: (H.Example e, H.Arg e ~ ()) => (IO () -> IO ()) -> e -> IO H.Result
-evaluateExampleWith action e = H.evaluateExample e (defaultParams {H.paramsQuickCheckArgs = (H.paramsQuickCheckArgs defaultParams) {replay = Just (read "", 0)}}) (action . ($ ())) noOpProgressCallback
+evaluateExampleWith action e = (H.itemExample $ H.evaluateExample e) (defaultParams {H.paramsQuickCheckArgs = (H.paramsQuickCheckArgs defaultParams) {replay = Just (read "", 0)}}) (action . ($ ())) noOpProgressCallback
 
 spec :: Spec
 spec = do

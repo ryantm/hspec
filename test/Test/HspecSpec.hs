@@ -66,6 +66,11 @@ spec = do
         let [SpecItem requirement _] = runSpecM (H.it "" True)
         requirement `shouldBe` "(unspecified behavior)"
 
+    context "when used with a QuickCheck property" $ do
+      it "marks it for parallel execution" $ do
+        let [SpecItem _ item] = runSpecM $ H.it "whatever" (property True)
+        itemIsParallelizable item `shouldBe` True
+
   describe "example" $ do
     it "fixes the type of an expectation" $ do
       r <- runSpec $ do

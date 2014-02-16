@@ -105,7 +105,7 @@ describe s = SpecGroup msg
 
 -- | Create a spec item.
 it :: Example e => String -> e -> SpecTree (Arg e)
-it s e = SpecItem msg $ Item False (evaluateExample e)
+it s e = SpecItem msg (evaluateExample e)
   where
     msg
       | null s = "(unspecified behavior)"
@@ -114,11 +114,11 @@ it s e = SpecItem msg $ Item False (evaluateExample e)
 -- | A type class for examples.
 class Example e where
   type Arg e
-  evaluateExample :: e -> Params -> ((Arg e -> IO ()) -> IO ()) -> ProgressCallback -> IO Result
+  evaluateExample :: e -> Item (Arg e)
 
 instance Example Bool where
   type Arg Bool = ()
-  evaluateExample b _ _ _ = if b then return Success else return (Fail "")
+  evaluateExample b = Item True $ \_ _ _ -> if b then return Success else return (Fail "")
 
 instance Example Expectation where
   type Arg Expectation = ()
@@ -126,14 +126,14 @@ instance Example Expectation where
 
 instance Example (a -> Expectation) where
   type Arg (a -> Expectation) = a
-  evaluateExample e _ action _ = (action e >> return Success) `E.catches` [
+  evaluateExample e = Item False $ \_ action _ -> (action e >> return Success) `E.catches` [
       E.Handler (\(HUnitFailure err) -> return (Fail err))
     , E.Handler (return :: Result -> IO Result)
     ]
 
 instance Example Result where
   type Arg Result = ()
-  evaluateExample r _ _ _ = return r
+  evaluateExample r = Item True $ \_ _ _ -> return r
 
 instance Example QC.Property where
   type Arg QC.Property = ()
@@ -141,7 +141,10 @@ instance Example QC.Property where
 
 instance Example (a -> QC.Property) where
   type Arg (a -> QC.Property) = a
-  evaluateExample p c action progressCallback = do
+  evaluateExample p = Item True $ \c action progressCallback -> do
+    let qcProgressCallback = QCP.PostTest QCP.NotCounterexample $
+          \st _ -> progressCallback (QC.numSuccessTests st, QC.maxSuccessTests st)
+
     r <- QC.quickCheckWithResult (paramsQuickCheckArgs c) {QC.chatty = False} (QCP.callback qcProgressCallback $ aroundProperty action p)
     when (isUserInterrupt r) $ do
       E.throwIO E.UserInterrupt
@@ -153,9 +156,6 @@ instance Example (a -> QC.Property) where
         QC.GaveUp {QC.numTests = n} -> Fail ("Gave up after " ++ pluralize n "test" )
         QC.NoExpectedFailure {}     -> Fail ("No expected failure")
     where
-      qcProgressCallback = QCP.PostTest QCP.NotCounterexample $
-        \st _ -> progressCallback (QC.numSuccessTests st, QC.maxSuccessTests st)
-
       sanitizeFailureMessage :: String -> String
       sanitizeFailureMessage = strip . addFalsifiable . stripFailed
 

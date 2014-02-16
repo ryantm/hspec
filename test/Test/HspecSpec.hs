@@ -137,6 +137,28 @@ spec = do
         silence $ H.hspec $ H.before (return n) $ H.beforeWith action $ do
           H.it "foo" $ (`shouldBe` show n)
 
+  describe "beforeAll" $ do
+    it "runs an action before the first spec item" $ do
+      ref <- newIORef ([] :: [String])
+      let append n = modifyIORef ref (++ return n)
+      silence $ H.hspec $ H.beforeAll (append "before") $ do
+        H.it "foo" $ do
+          append "foo"
+        H.it "bar" $ do
+          append "bar"
+      readIORef ref `shouldReturn` [
+          "before"
+        , "foo"
+        , "bar"
+        ]
+
+    context "when used with an action that returns a value" $ do
+      it "passes that value to the spec item" $ do
+        property $ \n -> do
+          silence $ H.hspec $ H.beforeAll (return n) $ do
+            H.it "foo" $ \m -> do
+              m `shouldBe` (n :: Int)
+
   describe "after" $ do
     it "must be used with a before action" $ do
       ref <- newIORef ([] :: [String])

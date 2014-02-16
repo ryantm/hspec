@@ -59,6 +59,7 @@ Library
       Test.Hspec.QuickCheck
   other-modules:
       Test.Hspec.Util
+      Test.Hspec.Memoize
       Test.Hspec.Compat
       Test.Hspec.Core.Type
       Test.Hspec.Core.QuickCheckUtil

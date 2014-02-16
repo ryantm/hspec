@@ -26,6 +26,8 @@ module Test.Hspec (
 , pendingWith
 , before
 , beforeWith
+, beforeAll
+, beforeAllWith
 , after
 , after_
 , around
@@ -37,6 +39,7 @@ module Test.Hspec (
 , hspec
 ) where
 
+import           Control.Applicative
 import           Control.Exception (finally)
 
 import           Test.Hspec.Core.Type hiding (describe, it)
@@ -44,6 +47,7 @@ import           Test.Hspec.Runner
 import           Test.Hspec.HUnit ()
 import           Test.Hspec.Expectations
 import qualified Test.Hspec.Core as Core
+import           Test.Hspec.Memoize
 
 -- | Combine a list of specs into a larger spec.
 describe :: String -> SpecWith a -> SpecWith a
@@ -93,6 +97,22 @@ before action = around (action >>=)
 -- | Run a custom action before every spec item.
 beforeWith :: (b -> IO a) -> SpecWith a -> SpecWith b
 beforeWith action = aroundWith $ \e x -> action x >>= e
+
+-- | Run a custom action before all spec items.
+beforeAll :: IO a -> SpecWith a -> SpecWith ()
+beforeAll action = fromSpecList . return . BuildSpecs . go
+  where
+    go spec = do
+      action_ <- ioMemo action
+      return . runSpecM $ before action_ spec
+
+-- | Run a custom action before all spec items.
+beforeAllWith :: (b -> IO a) -> SpecWith a -> SpecWith b
+beforeAllWith action = fromSpecList . return . BuildSpecs . go
+  where
+    go spec = do
+      action_ <- (. action) <$> newIOMemoizer
+      return . runSpecM $ aroundWith (\e x -> action_ x >>= e) spec
 
 -- | Run a custom action after every spec item.
 after :: ActionWith a -> SpecWith a -> SpecWith a

@@ -154,7 +154,7 @@ hspecWith c_ spec_ = withHandle c_ $ \h -> do
 isDumb :: IO Bool
 isDumb = maybe False (== "dumb") <$> lookupEnv "TERM"
 
-markSuccess :: Item -> Item
+markSuccess :: Item () -> Item ()
 markSuccess item = item {itemExample = evaluateExample Success}
 
 -- | Summary of a test run.

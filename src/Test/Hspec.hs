@@ -26,6 +26,8 @@ module Test.Hspec (
 , pendingWith
 , before
 , beforeWith
+, beforeAll
+, beforeAllWith
 , after
 , after_
 , around
@@ -38,6 +40,7 @@ module Test.Hspec (
 ) where
 
 import           Control.Exception (finally)
+import           Control.Concurrent.MVar
 
 import           Test.Hspec.Core.Type hiding (describe, it)
 import           Test.Hspec.Runner
@@ -93,6 +96,31 @@ before action = around (action >>=)
 -- | Run a custom action before every spec item.
 beforeWith :: (b -> IO a) -> SpecWith a -> SpecWith b
 beforeWith action = aroundWith $ \e x -> action x >>= e
+
+-- | Run a custom action before all spec items.
+beforeAll :: IO a -> SpecWith a -> SpecWith ()
+beforeAll action = fromSpecList . return . BuildSpecs . go
+  where
+    go spec = do
+      mvar <- newMVar Nothing
+      let action_ = memoize mvar action
+      return . runSpecM $ before action_ spec
+
+memoize :: MVar (Maybe a) -> IO a -> IO a
+memoize mvar action = modifyMVar mvar $ \ma -> case ma of
+  Just a -> return (ma, a)
+  Nothing -> do
+    a <- action
+    return (Just a, a)
+
+-- | Run a custom action before all spec items.
+beforeAllWith :: (b -> IO a) -> SpecWith a -> SpecWith b
+beforeAllWith action = fromSpecList . return . BuildSpecs . go
+  where
+    go spec = do
+      mvar <- newMVar Nothing
+      let action_ = memoize mvar . action
+      return . runSpecM $ aroundWith (\e x -> action_ x >>= e) spec
 
 -- | Run a custom action after every spec item.
 after :: ActionWith a -> SpecWith a -> SpecWith a

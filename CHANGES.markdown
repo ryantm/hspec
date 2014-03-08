@@ -1,6 +1,7 @@
 ## Changes in 2.0.0
  - Remove `Example` instance for `Test.HUnit.Test` (#101), use
    `Test.Hspec.HUnit.fromHUnitTest` instead.
+ - Do not reexport `property` from `Test.Hspec.QuickCheck`
 
 ## Changes in 1.9.5
  - Make sure that ctrl-c works properly with GHC 7.8.* and QuickCheck-2.6

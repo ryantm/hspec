@@ -89,7 +89,7 @@ data Item a = Item {
 , itemExample :: Params -> (ActionWith a -> IO ()) -> ProgressCallback -> IO Result
 }
 
--- | An `IO` action that expects an argument of type a.
+-- | An `IO` action that expects an argument of type @a@.
 type ActionWith a = a -> IO ()
 
 mapSpecItem :: (Item a -> Item b) -> SpecWith a -> SpecWith b

@@ -1,3 +1,4 @@
+module Test.Hspec.Memoize (ioMemo, newIOMemoizer) where
 -- Taken from:
 --
 -- * https://github.com/DanBurton/io-memoize/
@@ -33,7 +34,6 @@
 -- THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 -- (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-module Test.Hspec.Memoize (ioMemo, newIOMemoizer) where
 
 import Control.Concurrent.MVar
 import Data.IORef

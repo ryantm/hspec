@@ -95,7 +95,13 @@ mkConfig mFailureReport opts = Config {
       [] -> Nothing
       xs -> Just $ foldl1' (\p0 p1 path -> p0 path || p1 path) (map filterPredicate xs)
 
-    rerunFilter = flip elem . failureReportPaths <$> mFailureReport
+    rerunFilter = flip elem <$> (mFailureReport >>= foobar)
+
+    foobar r
+      | null paths = Nothing
+      | otherwise = Just paths
+      where
+        paths = failureReportPaths r
 
 configQuickCheckArgs :: Config -> QC.Args
 configQuickCheckArgs c = qcArgs
